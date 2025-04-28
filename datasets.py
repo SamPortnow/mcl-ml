@@ -138,7 +138,10 @@ class Lang:
         #  output : [m or m+1 LongTensor] indices of each symbol (plus EOS if appropriate)
         mylist = copy(mylist)
         if add_eos: mylist.append(EOS_token)
-        indices = [self.symbol2index[s] for s in mylist]
+        try:
+            indices = [self.symbol2index[s] for s in mylist]
+        except KeyError as e:
+            print(f"KeyError for symbol {e} in mylist: {mylist}")            
         output = torch.LongTensor(indices) # keep on CPU since this occurs inside Dataset getitem..
         return output
 
@@ -556,7 +559,7 @@ class VanillaDataSCAN(Dataset):
         S = bundle_biml_episode(S)
         return S
 
-def get_COGS_vocab(make_output_upper=True, filenames=['COGS/train.tsv','COGS/gen.tsv','COGS/test.tsv','COGS/dev.tsv']):
+def get_COGS_vocab(make_output_upper=True, filenames=['COGS/RECOGStrain.tsv','COGS/RECOGSgen.tsv','COGS/RECOGStest.tsv','COGS/RECOGSdev.tsv']):
     # Get source and target vocabulary for COGS
     #
     # Input
@@ -677,12 +680,13 @@ def common_to_proper_output(output_list, token_curr, token_new):
     assert(token_new.isupper())
     matches = [ # re.match applies at beginning of string only; re.search applies anywhere
                 re.match("LAMBDA &A &. " + token_curr + " \( &A \)", output_str), # flag for common noun primitive
-                re.search("\* " + token_curr + " \( X _ (\d+) \) ;", output_str), # flag for common noun with 'the'
-                re.match(token_curr + " \( X _ (\d+) \) AND ", output_str), # flag for common noun as *subject* with "a" and
+                re.search(token_curr + " \( (\d+) \) ;", output_str), # TODO: added by me
+
+                re.match(token_curr + " \( (\d+) \) AND ", output_str), # flag for common noun as *subject* with "a" and
                                                                             # NO other "the" determiner in sentence
-                re.search("; " + token_curr + " \( X _ (\d+) \) AND ", output_str),# flag for common noun as *subject* with "a" and
+                re.search("; " + token_curr + " \( (\d+) \) AND ", output_str),# flag for common noun as *subject* with "a" and
                                                                                   # with >=1 "the" determiner in sentence
-                re.search(" AND " + token_curr + " \( X _ (\d+) \)", output_str) # flag for common noun with "a" determiner
+                re.search(" AND " + token_curr + " \( (\d+) \)", output_str) # flag for common noun with "a" determiner
               ]
     filler_for_each_match = [' ', ' ', ' ', '; ', ' ']
     assert(sum([bool(m) for m in matches])==1), "there should be exactly one template that is matching"
@@ -696,7 +700,8 @@ def common_to_proper_output(output_list, token_curr, token_new):
     my_var_idx = m.group(1)
     assert(my_var_idx.isnumeric())
     my_var_idx = int(my_var_idx)
-    output_str = output_str.replace(" X _ "+str(my_var_idx)+" "," "+token_new+" ")
+    # change here
+    output_str = output_str.replace(" "+str(my_var_idx)+" "," "+token_new+" ")
     output_str = output_str.replace(" "+token_curr+" "," "+token_new+" ")
     output_list = output_str.split()
     for j in range(len(output_list)):
@@ -757,12 +762,12 @@ class DataCOGS(Dataset):
         self.inc_support_in_query = inc_support_in_query                
         self.p_shuffle = p_shuffle
         self.p_make_all_proper = p_make_all_proper
-        files_all = {'train':'COGS/train.tsv',
-                    'test_iid':'COGS/test.tsv',
-                    'gen_lexical':'COGS/gen_lexical.tsv',
-                    'gen_structural':'COGS/gen_structural.tsv',
-                    'dev':'COGS/dev.tsv',
-                    'dev_tiny':'COGS/dev_tiny.tsv'}
+        files_all = {'train':'COGS/RECOGStrain.tsv',
+                    'test_iid':'COGS/RECOGStest.tsv',
+                    'gen_lexical':'COGS/RECOGSgen_lexical.tsv',
+                    'gen_structural':'COGS/RECOGSgen_structural.tsv',
+                    'dev':'COGS/RECOGSdev.tsv',
+                    'dev_tiny':'COGS/RECOGSdev_tiny.tsv'}
         self.fn_query = files_all[mode]
         print('  Started loading DataCOGS dataset...')
         print('   Loading',files_all['train'],'for making support sets')
@@ -787,11 +792,19 @@ class DataCOGS(Dataset):
         self.indx_support_by_flag = self.__create_support_index()
         assert(self.max_flags <= self.ns) # there must be room for at least one support example per flagged word in a query
         self.input_symbols, self.output_symbols = get_COGS_vocab(make_output_upper=True)
+        for x in range(0, 100):
+            if str(x) not in self.output_symbols:
+                self.output_symbols.append(str(x))
         if isinstance(self.WI,list):
             assert(all([w in self.input_symbols for w in self.WI])), "all tokens in permute set WI must also be in input vocab"
             assert(all([w in self.output_symbols for w in self.WO])), "all tokens in permute set WO must also be in output vocab"
         for command in self.commands_support+self.commands_query:
             assert(all([w in self.input_symbols for w in command])), "all input tokens must be in input vocab"
+        for output in self.outputs_support+self.outputs_query:            
+            for w in output:
+                if not w in self.output_symbols:
+                    print ('why arent you in output symbols?')
+                    print (w)
         for output in self.outputs_support+self.outputs_query:            
             assert(all([w in self.output_symbols for w in output])), "all output tokens must be in output vocab"
         comb = combine_input_output_symb(self.input_symbols,self.output_symbols)
@@ -920,12 +933,12 @@ class VanillaCOGS(Dataset):
         self.ns = 1
         self.mode = mode
         self.is_train = mode == 'train'
-        files_all = {'train':'COGS/train.tsv',
-                    'test_iid':'COGS/test.tsv',
-                    'gen_lexical':'COGS/gen_lexical.tsv',
-                    'gen_structural':'COGS/gen_structural.tsv',
-                    'dev':'COGS/dev.tsv',
-                    'dev_tiny':'COGS/dev_tiny.tsv'}
+        files_all = {'train':'COGS/RECOGStrain.tsv',
+                    'test_iid':'COGS/RECOGStest.tsv',
+                    'gen_lexical':'COGS/RECOGSgen_lexical.tsv',
+                    'gen_structural':'COGS/RECOGSgen_structural.tsv',
+                    'dev':'COGS/RECOGSdev.tsv',
+                    'dev_tiny':'COGS/RECOGSdev_tiny.tsv'}
         self.fn = files_all[mode]
         print('   Loading',self.fn,'for MODE =',self.mode)
         self.commands, self.outputs, self.type_labels = readfile_cogs(self.fn)
