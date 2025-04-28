@@ -795,6 +795,7 @@ class DataCOGS(Dataset):
         for x in range(0, 100):
             if str(x) not in self.output_symbols:
                 self.output_symbols.append(str(x))
+        self.out_symbols.append('HAY')
         if isinstance(self.WI,list):
             assert(all([w in self.input_symbols for w in self.WI])), "all tokens in permute set WI must also be in input vocab"
             assert(all([w in self.output_symbols for w in self.WO])), "all tokens in permute set WO must also be in output vocab"
