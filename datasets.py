@@ -139,7 +139,7 @@ class Lang:
         mylist = copy(mylist)
         if add_eos: mylist.append(EOS_token)
         try:
-            indices = [self.symbol2index[s] for s in mylist]
+            indices = [self.symbol2index.get(s, self.symbol2index['UNK']) for s in mylist]
         except KeyError as e:
             print(f"KeyError for symbol {e} in mylist: {mylist}")            
         output = torch.LongTensor(indices) # keep on CPU since this occurs inside Dataset getitem..
@@ -795,7 +795,9 @@ class DataCOGS(Dataset):
         for x in range(0, 100):
             if str(x) not in self.output_symbols:
                 self.output_symbols.append(str(x))
-        self.out_symbols.append('HAY')
+        self.output_symbols.append('HAY')
+        self.output_symbols.append('TEA')
+        self.output_symbols.append('UNK')
         if isinstance(self.WI,list):
             assert(all([w in self.input_symbols for w in self.WI])), "all tokens in permute set WI must also be in input vocab"
             assert(all([w in self.output_symbols for w in self.WO])), "all tokens in permute set WO must also be in output vocab"
