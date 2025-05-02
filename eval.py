@@ -288,7 +288,7 @@ if __name__ == "__main__":
 
         seed_all()
         print('Loading model:',fn_out_model,'on',DEVICE)
-        checkpoint = torch.load(fn_out_model, map_location=DEVICE)
+        checkpoint = torch.load(fn_out_model, map_location=DEVICE, weights_only = False)
         if not episode_type: episode_type = checkpoint['episode_type']
         if batch_size<=0: batch_size = checkpoint['batch_size']
         nets_state_dict = checkpoint['nets_state_dict']
